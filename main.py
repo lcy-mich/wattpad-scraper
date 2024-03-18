@@ -21,7 +21,7 @@ startid = 95
 endid = 301339259        
 maxretries = 10
 
-sleeptime=10
+defaultsleeptime=20
 
 illegalchars = "#$%!\'\":@+`|={}\\<>*?/"
 
@@ -44,7 +44,7 @@ def _threadsplitter(threadnum, startidx, endidx):
             return get(storyurl.format(id=id), headers=headers)
         return get(id, headers=headers)
 
-    def _processhtml(html, id, q):
+    def _processhtml(html, id, sleeptime):
         html = BeautifulSoup(html, 'html.parser')
         title = strip_chars(html.find("span",class_="sr-only").get_text().replace(" ","-"))+f"_{id}"
         desc = html.find("pre", class_="description-text").get_text()
@@ -69,11 +69,14 @@ def _threadsplitter(threadnum, startidx, endidx):
                 retries = 0
                 while chapterhtml.status_code != 200 and retries <= maxretries:
                     retries += 1
-                    print(f"FAILURE chapter {url}, STATUS_CODE: {chapterhtml.status_code} RETRYING.")
-                    sleep(sleeptime)
+                    print(f"FAILURE chapter {url}, STATUS_CODE: {chapterhtml.status_code} RETRYING WITH DELAY {sleeptime}")
+                    if chapterhtml.status_code != 404:
+                        sleeptime += defaultsleeptime
+                        sleep(sleeptime)
                     chapterhtml = _fetchhtml(url)
                 chapterhtml = BeautifulSoup(chapterhtml.content, "html.parser")
-
+                sleeptime = max(defaultsleeptime, sleeptime - defaultsleeptime//2)
+                
                 if chapterhtml.find("div", class_="panel-reading").find("pre").get_text().strip() == "":
                     isempty = True
                     
@@ -83,22 +86,24 @@ def _threadsplitter(threadnum, startidx, endidx):
             print(strip_chars(chapter))
             with open(f"{downloadpath}{title}/{strip_chars(chapter)}.txt", "w", encoding="utf-8") as f:
                 f.write("\n".join(pages))
-            sleep(sleeptime)
+            sleep(sleeptime//2)
         return html
     
     def threadhandler(q, start, end):
+        sleeptime = defaultsleeptime
         for id in range(start,end+1):
             try:
                 html = _fetchhtml(id)
-                print(f"fetching story id : {id}")
                 if html.status_code == 200:
                     print(f"SUCCESSFUL story {id}")
-                    _processhtml(html.content, id, q)
+                    sleeptime = max(defaultsleeptime, sleeptime - defaultsleeptime//2)
+                    _processhtml(html.content, id, sleeptime)
                 else:
-                    print(f"FAILURE story {id}, STATUS_CODE: {html.status_code}")
-                    if html.status_code != 400:
+                    print(f"FAILURE story {id}, STATUS_CODE: {html.status_code} RETRYING WITH DELAY {sleeptime}")
+                    if html.status_code != 404:
                         q.put(id)
-                    sleep(sleeptime)
+                        sleeptime += defaultsleeptime
+                        sleep(sleeptime)
             except:
                     q.put(id)
     
