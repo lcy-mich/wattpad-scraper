@@ -21,7 +21,7 @@ startid = 95
 endid = 301339259        
 maxretries = 10
 
-defaultsleeptime=20
+defaultsleeptime=60
 
 illegalchars = "#$%!\'\":@+`|={}\\<>*?/"
 
@@ -86,11 +86,11 @@ def _threadsplitter(threadnum, startidx, endidx):
             print(strip_chars(chapter))
             with open(f"{downloadpath}{title}/{strip_chars(chapter)}.txt", "w", encoding="utf-8") as f:
                 f.write("\n".join(pages))
-            sleep(sleeptime//2)
+            sleep(sleeptime)
         return html
     
     def threadhandler(q, start, end):
-        sleeptime = defaultsleeptime
+        sleeptime = defaultsleeptime+threadnum//2
         for id in range(start,end+1):
             try:
                 html = _fetchhtml(id)
