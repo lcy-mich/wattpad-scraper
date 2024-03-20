@@ -125,6 +125,7 @@ def _threadsplitter(threadnum, startidx, endidx):
             
     for thread in threads:
         thread.start()
+        sleep(defaultsleeptime)
     for thread in threads:
         thread.join()
     failedids.join()
