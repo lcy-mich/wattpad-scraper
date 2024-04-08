@@ -8,7 +8,8 @@ from sys import argv
 
 mkdir = lambda x : (print(f"creating directory \"{x}\""), makedir(x)) if not path.exists(x) else 0
 
-err_msg = "Error ({error}) occurred when running with args: {args}\n{message}"
+err_msg = "ERROR ({error}) occurred when running with args: {args}\n{message}"
+log_temp = "{action} {itemtype} {item} {url}, {extra}"
 
 downloadpath = "./Scraped/"
 
@@ -21,7 +22,8 @@ startid = 95
 endid = 301339259        
 maxretries = 10
 
-defaultsleeptime=60
+defaultsleeptime=120
+sleepdec=defaultsleeptime//4
 
 illegalchars = "#$%!\'\":@+`|={}\\<>*?/"
 
@@ -60,6 +62,9 @@ def _threadsplitter(threadnum, startidx, endidx):
             f.write(desc)
         
         for (chapter, link) in chapters:
+            if path.exists(f"{downloadpath}{title}/{strip_chars(chapter)}.txt"):
+                print(log_temp.format(action="SKIPPED", itemtype="chapter", item=chapter, url=url))
+                continue
             pages=[]
             pagecount=1
             isempty = False
@@ -69,24 +74,25 @@ def _threadsplitter(threadnum, startidx, endidx):
                 retries = 0
                 while chapterhtml.status_code != 200 and retries <= maxretries:
                     retries += 1
-                    print(f"FAILURE chapter {url}, STATUS_CODE: {chapterhtml.status_code} RETRYING WITH DELAY {sleeptime}")
+                    print(log_temp.format(action="FAILURE", itemtype="chapter", item=chapter, url=url, extra=f"STATUS_CODE: {chapterhtml.status_code} RETRYING WITH DELAY {sleeptime}"))
                     if chapterhtml.status_code != 404:
                         sleeptime += defaultsleeptime
                         sleep(sleeptime)
                     chapterhtml = _fetchhtml(url)
                 chapterhtml = BeautifulSoup(chapterhtml.content, "html.parser")
-                sleeptime = max(defaultsleeptime, sleeptime - defaultsleeptime//2)
+                sleeptime = max(defaultsleeptime, sleeptime - sleepdec)
                 
                 if chapterhtml.find("div", class_="panel-reading").find("pre").get_text().strip() == "":
                     isempty = True
                     
-                print(f"SUCCESS chapter {url} page {pagecount}")
+                print(log_temp.format(action="SUCCESS", itemtype="chapter", item=chapter, extra=f"page {pagecount}"))
                 pages.append("\n".join([p.get_text() for p in chapterhtml.find("div", class_="panel-reading").find_all("p")]))
                 pagecount+=1
             print(strip_chars(chapter))
             with open(f"{downloadpath}{title}/{strip_chars(chapter)}.txt", "w", encoding="utf-8") as f:
                 f.write("\n".join(pages))
             sleep(sleeptime)
+        
         return html
     
     def threadhandler(q, start, end):
@@ -95,15 +101,17 @@ def _threadsplitter(threadnum, startidx, endidx):
             try:
                 html = _fetchhtml(id)
                 if html.status_code == 200:
-                    print(f"SUCCESSFUL story {id}")
-                    sleeptime = max(defaultsleeptime, sleeptime - defaultsleeptime//2)
+                    print(log_temp.format(action="SUCCESS", itemtype="story", item=id))
+                    sleeptime = max(defaultsleeptime, sleeptime - sleepdec)
                     _processhtml(html.content, id, sleeptime)
                 else:
-                    print(f"FAILURE story {id}, STATUS_CODE: {html.status_code} RETRYING WITH DELAY {sleeptime}")
                     if html.status_code != 404:
+                        print(log_temp.format(action="FAILURE", itemtype="story", item=id, extra=f"STATUS_CODE: {html.status_code} RETRYING WITH DELAY {sleeptime}"))
                         q.put(id)
                         sleeptime += defaultsleeptime
                         sleep(sleeptime)
+                        continue
+                    print(log_temp.format(action="SKIPPED", itemtype="story", item=id))
             except:
                     q.put(id)
     
@@ -136,7 +144,7 @@ def _threadsplitter(threadnum, startidx, endidx):
     with open(failedidpath, "a", encoding="utf-8") as f:
         while not failedids.empty():
             failedid = failedids.get()
-            print(f"ID: {failedid}, has FAILED. Writing to {failedidpath}")
+            print(log_temp.format(action="FAILURE", itemtype="ID", item=failedid, extra=f"Writing {failedidpath}"))
             f.write(str(id))
     return
 
@@ -169,7 +177,7 @@ def main(args):
         raise Exception("Invalid commands")
     except Exception as e:
         print(err_msg.format(error=e, args=", ".join(args), message="Try running \"-h\" to see all commands."))
-        print("Exception:",e)
+        print(log_temp.format(action="EXCEPTION", itemtype=e))
         return
 
 if __name__ == "__main__":
